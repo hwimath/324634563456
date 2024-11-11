@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>휘매쓰 연산 챌린지!</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            background-color: #f0f8ff;
+            margin: 0;
+        }
+        #game-container {
+            display: none;
+            padding: 20px;
+        }
+        #difficulty-selection {
+            margin-top: 100px;
+        }
+        .difficulty-button {
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #4682b4;
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+        .difficulty-button:hover {
+            background-color: #5a9bd3;
+        }
+        #question {
+            font-size: 40px;
+            margin: 20px 0;
+        }
+        #answer-input {
+            font-size: 30px;
+            padding: 10px;
+            width: 200px;
+            text-align: center;
+        }
+        #submit-button {
+            padding: 10px 20px;
+            font-size: 20px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        #energy-bar {
+            width: 80%;
+            height: 30px;
+            background-color: #ddd;
+            margin: 20px auto;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        #energy-inner {
+            height: 100%;
+            background-color: #32cd32;
+            width: 100%;
+        }
+        #score, #lives, #total-time {
+            font-size: 20px;
+            margin: 10px;
+        }
+        #popup {
+            display: none;
+            position: fixed;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -30%);
+            background-color: white;
+            padding: 30px;
+            border: 2px solid #000;
+            z-index: 10;
+        }
+        #popup-message {
+            font-size: 25px;
+            margin-bottom: 20px;
+        }
+        #popup-close {
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>휘매쓰 연산 챌린지!</h1>
+
+    <div id="difficulty-selection">
+        <h2>난이도를 선택하세요:</h2>
+        <button class="difficulty-button" data-level="최상" data-time="20000" data-score="20">최상</button>
+        <button class="difficulty-button" data-level="상" data-time="30000" data-score="15">상</button>
+        <button class="difficulty-button" data-level="중" data-time="40000" data-score="13">중</button>
+        <button class="difficulty-button" data-level="하" data-time="0" data-score="10">하</button>
+    </div>
+
+    <div id="game-container">
+        <div id="energy-bar">
+            <div id="energy-inner"></div>
+        </div>
+        <div id="question"></div>
+        <input type="number" id="answer-input" autocomplete="off">
+        <br>
+        <button id="submit-button">제출</button>
+        <div id="score">점수: 0</div>
+        <div id="lives">남은 기회: 3</div>
+        <div id="total-time">총 시간: 0초</div>
+    </div>
+
+    <div id="popup">
+        <div id="popup-message"></div>
+        <button id="popup-close">닫기</button>
+    </div>
+    <div id="overlay"></div>
+
+    <script>
+        const difficultyButtons = document.querySelectorAll('.difficulty-button');
+        const gameContainer = document.getElementById('game-container');
+        const questionElement = document.getElementById('question');
+        const answerInput = document.getElementById('answer-input');
+        const submitButton = document.getElementById('submit-button');
+        const energyInner = document.getElementById('energy-inner');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const totalTimeElement = document.getElementById('total-time');
+        const popup = document.getElementById('popup');
+        const popupMessage = document.getElementById('popup-message');
+        const popupClose = document.getElementById('popup-close');
+        const overlay = document.getElementById('overlay');
+
+        let timeLimit, scorePerQuestion, levelName;
+        let currentQuestion, correctAnswer;
+        let timer, energyTimer, totalTimeTimer;
+        let remainingLives = 3;
+        let totalScore = 0;
+        let totalTime = 0;
+        let usedQuestions = new Set();
+        let initialTimeLimit;
+        let exemptionTicket = 0;
+
+        difficultyButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                levelName = button.getAttribute('data-level');
+                timeLimit = parseInt(button.getAttribute('data-time'));
+                initialTimeLimit = timeLimit;
+                scorePerQuestion = parseInt(button.getAttribute('data-score'));
+                document.getElementById('difficulty-selection').style.display = 'none';
+                gameContainer.style.display = 'block';
+                startGame();
+            });
+        });
+
+        function startGame() {
+            generateQuestion();
+            if (timeLimit > 0) {
+                startEnergyBar();
+            }
+            totalTimeTimer = setInterval(() => {
+                totalTime++;
+                totalTimeElement.textContent = `총 시간: ${totalTime}초`;
+            }, 1000);
+        }
+
+        function generateQuestion() {
+            let num1, num2;
+            do {
+                num1 = getRandomNumber();
+                num2 = getRandomNumber();
+                correctAnswer = num1 + num2;
+            } while (usedQuestions.has(`${num1}+${num2}`));
+            usedQuestions.add(`${num1}+${num2}`);
+            questionElement.textContent = `${num1} + ${num2} = ?`;
+            answerInput.value = '';
+            answerInput.focus();
+            if (timeLimit > 0) {
+                resetEnergyBar();
+            }
+            checkForPopup();
+        }
+
+        function getRandomNumber() {
+            let digits = [];
+            for (let i = 0; i < 3; i++) {
+                digits.push(Math.floor(Math.random() * 9) + 1);
+            }
+            return parseInt(digits.join(''));
+        }
+
+        function resetEnergyBar() {
+            clearInterval(timer);
+            energyInner.style.width = '100%';
+            let currentLimit = timeLimit;
+            timer = setInterval(() => {
+                currentLimit -= 100;
+                let widthPercentage = (currentLimit / timeLimit) * 100;
+                energyInner.style.width = widthPercentage + '%';
+                if (currentLimit <= 0) {
+                    clearInterval(timer);
+                    handleWrongAnswer();
+                }
+            }, 100);
+            timeLimit *= 0.99; // Decrease time limit by 1%
+        }
+
+        function startEnergyBar() {
+            energyInner.style.width = '100%';
+        }
+
+        submitButton.addEventListener('click', checkAnswer);
+        answerInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkAnswer();
+            }
+        });
+
+        function checkAnswer() {
+            let playerAnswer = parseInt(answerInput.value);
+            if (playerAnswer === correctAnswer) {
+                totalScore += scorePerQuestion;
+                scoreElement.textContent = `점수: ${totalScore}`;
+                if (timeLimit > 0) {
+                    clearInterval(timer);
+                }
+                generateQuestion();
+            } else {
+                handleWrongAnswer();
+            }
+        }
+
+        function handleWrongAnswer() {
+            if (exemptionTicket > 0) {
+                exemptionTicket--;
+                alert(`틀렸습니다! 정답은 ${correctAnswer}입니다.\n면제권을 사용하여 기회는 줄어들지 않습니다.`);
+            } else {
+                remainingLives--;
+                livesElement.textContent = `남은 기회: ${remainingLives}`;
+                alert(`틀렸습니다! 정답은 ${correctAnswer}입니다.`);
+                if (remainingLives === 0) {
+                    endGame();
+                    return;
+                }
+            }
+            if (timeLimit > 0) {
+                clearInterval(timer);
+            }
+            generateQuestion();
+        }
+
+        function endGame() {
+            clearInterval(timer);
+            clearInterval(totalTimeTimer);
+            alert(`게임 종료! 총 점수: ${totalScore}점, 총 시간: ${totalTime}초`);
+            location.reload();
+        }
+
+        function checkForPopup() {
+            let randomNum = Math.random();
+            if (randomNum < 1/10000) {
+                showPopup('축하합니다! 5000원 상품권에 당첨되셨습니다!');
+            } else if (randomNum < 1/1000) {
+                showPopup('축하합니다! 3000원 상품권에 당첨되셨습니다!');
+            } else if (randomNum < 1/500) {
+                exemptionTicket++;
+                showPopup('축하합니다! 1회 면제권을 획득하셨습니다!');
+            }
+        }
+
+        function showPopup(message) {
+            popupMessage.textContent = message;
+            popup.style.display = 'block';
+            overlay.style.display = 'block';
+        }
+
+        popupClose.addEventListener('click', () => {
+            popup.style.display = 'none';
+            overlay.style.display = 'none';
+        });
+    </script>
+
+</body>
+</html>
